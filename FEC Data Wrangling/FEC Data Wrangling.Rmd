@@ -1,0 +1,73 @@
+---
+title: "Generic Lab Name"
+author: "Name"
+date: "Date of lab session"
+output: oilabs::lab_report
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(oilabs)
+library(tidyverse)
+```
+
+* * *
+
+### Exercise 1: 
+
+```{r}
+
+glimpse(committees)
+glimpse(house_elections)
+
+committees <- committees %>%
+  select(cmte_id, cmte_name, cmte_state, cmte_type, cmte_party_affiliation, cand_id) %>%
+  filter(cmte_party_affiliation == "REP" | cmte_party_affiliation == "DEM")
+
+house_elections <- house_elections %>%
+  select(fec_id, candidate_name, incumbent, party, ge_winner) %>%
+  filter(party == "D" | party == "R") %>%
+  rename(cand_id = fec_id)
+
+house_elections$party[house_elections$party == "R"] <- "REP"
+house_elections$party[house_elections$party == "D"] <- "DEM"
+
+  
+```
+
+
+
+```{r}
+
+candidates <- candidates %>%
+  select(cand_id, cand_name, cand_party_affiliation, cand_election_yr, cand_office_state, cand_office, cand_office_district, cand_ici) %>%
+  filter(cand_party_affiliation == "DEM" | cand_party_affiliation == "REP")
+
+```
+
+
+
+```{r}
+
+contributions <- contributions %>%
+  filter(amndt_ind == "N", memo_cd != "X") %>%
+  select(cmte_id, entity_type, transaction_amt, other_id, cand_id)
+  
+
+```
+
+
+
+```{r}
+
+house_contributions <- house_elections %>%
+  left_join(contributions, by = "cand_id")
+
+View(house_contributions)
+
+```
+
+
+
