@@ -9,7 +9,6 @@ output: oilabs::lab_report
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(ggplot2)
-library(oilabs)
 library(tidyverse)
 load("C:/Users/admin/Desktop/Data Wrangling/candidates.rda")
 load("C:/Users/admin/Desktop/Data Wrangling/contributions.rda")
@@ -57,7 +56,7 @@ candidates <- candidates %>%
 ```{r}
 
 contributions <- contributions %>%
-  filter(amndt_ind == "N", memo_cd != "X") %>%
+  filter(amndt_ind == "N", memo_cd != "X", transaction_type != "24A", transaction_type != "24N") %>%
   select(cmte_id, entity_type, transaction_amt, other_id, cand_id)
   
 
@@ -94,10 +93,58 @@ house_elections <- house_elections %>%
 
 incumbent_plot <- ggplot(house_elections, aes(y = total_amt, x = incumbent)) + geom_boxplot(aes(color = party, fill = party))
 
-winner_plot <- ggplot(house_elections, aes(y = total_amt, x = ge_winner)) + geom_violin(aes(color = party, fill = party))
+winner_plot <- ggplot(house_elections, aes(y = total_amt, x = ge_winner)) + geom_boxplot(aes(color = party, fill = party))
 
 incumbent_plot
 winner_plot
 
 ```
+
+```{r}
+
+individuals <- individuals %>%
+  select(cmte_id, name, transaction_type, transaction_amt) %>%
+  group_by(cmte_id, transaction_type) %>%
+  summarize(no_of_contributions = n(), total_indiv_amt = sum(transaction_amt))
+
+```
+
+```{r}
+
+committees <- committees %>%
+  left_join(individuals, by = "cmte_id")
+
+```
+
+Comparing National Republican Congressional Committee (NRCC) and Democratic Congressional Campaign Committee (DCCC):
+
+```{r}
+
+hill_committees <- committees %>%
+  filter(cmte_id == "C00075820" | cmte_id == "C00000935" | cmte_id == "C00027466" | cmte_id == "C00042366") %>%
+  group_by(cmte_name) %>%
+  summarize(total_no_of_contributions = sum(no_of_contributions), total_indiv_contributions = sum(total_indiv_amt))
+
+```
+ 
+4 major Hill Committees' individual contributions for 2011-2012 cycle:
+
+```{r}
+
+indiv_contribution_plot <- ggplot(hill_committees, aes(y = total_indiv_contributions, x = cmte_name, fill = cmte_name)) + geom_bar(stat = "identity") + scale_fill_manual(values=c("cornflowerblue", "blue", "pink", "red"))
+
+indiv_contribution_plot
+
+```
+
+4 major Hill Committees' number of individual contributions for 2011-2012 cycle:
+
+```{r}
+
+contribution_number_plot <- ggplot(hill_committees, aes(y = total_no_of_contributions, x = cmte_name, fill = cmte_name)) + geom_bar(stat = "identity") + scale_fill_manual(values=c("cornflowerblue", "blue", "pink", "red"))
+
+contribution_number_plot
+
+```
+
 
