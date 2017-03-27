@@ -1,17 +1,196 @@
 ---
-title: "Mini-Project 2"
-author: "Your Name Here"
-date: "March 24, 2017"
-output: html_document
+title: "Relationship between candidate party, incumbency, and campaign contributions"
+author: "Crystal Ong, Sarah Sorensen, Cas Sweeney"
+date: "3/26/27"
+output: oilabs::lab_report
 ---
 
-
-## Loading the data
-
-
-```{r, include=FALSE}
-load("house_elections.rda")
+```{r setup, include=FALSE}
+##load the libraries and the data sets
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(oilabs)
+library(scales)
 load("candidates.rda")
 load("committees.rda")
 load("contributions.rda")
+load("house_elections.rda")
+load("individuals.rda")
+
 ```
+
+* * *
+
+### Exercise 1: 
+
+```{r}
+##manipulate the data
+##first look at the data you have
+glimpse(committees)
+glimpse(house_elections)
+##filter out the unneccessary data
+##select the columns that you want and within the columns filter to only get the rows you want
+committees <- committees %>%
+  select(cmte_id, cmte_name, cmte_state, cmte_type, cmte_party_affiliation, cand_id) %>%
+  filter(cmte_party_affiliation == "REP" | cmte_party_affiliation == "DEM")
+
+house_elections <- house_elections %>%
+  select(fec_id, candidate_name, incumbent, party, ge_winner) %>%
+  filter(party == "D" | party == "R") %>%
+  rename(cand_id = fec_id)
+
+##rename the variables so that they can be joined together
+house_elections$party[house_elections$party == "R"] <- "REP"
+house_elections$party[house_elections$party == "D"] <- "DEM"
+
+  
+```
+
+
+
+```{r}
+##filter and select these data sets for the same reason as above
+candidates <- candidates %>%
+  select(cand_id, cand_name, cand_party_affiliation, cand_election_yr, cand_office_state, cand_office, cand_office_district, cand_ici, cand_status) %>%
+  filter(cand_party_affiliation == "DEM" | cand_party_affiliation == "REP")
+
+```
+
+
+
+```{r}
+##filter and select this data set for the same reason as above
+##filter so that you only have new reports (N) and removed things that were labeled not to be filed (X)
+contributions <- contributions %>%
+  filter(amndt_ind == "N", memo_cd != "X", transaction_type != "24A", transaction_type != "24N") %>%
+  select(cmte_id, entity_type, transaction_amt, other_id, cand_id)
+  
+
+```
+
+
+
+```{r}
+##join the house elections and contributions data sets into a new data set called house_contributions that combined into candidate id and candidate name, and summarized the total contributions
+
+house_contributions <- house_elections %>%
+  left_join(contributions, by = "cand_id") %>%
+  group_by(cand_id, candidate_name) %>%
+  summarize(total_amt = sum(transaction_amt))
+```
+
+```{r}
+##remade the house_contributions data set into the house_elections data set to conbine the data from house_contributions with the rest of the data from house_elections
+##remove candidate_name.y because there is already candidate names in the house_elections data set
+##filtered out all the candidates that had NA under their total amount
+
+house_elections <- house_elections %>%
+  left_join(house_contributions, by = "cand_id") %>%
+  select(-candidate_name.y) %>%
+  rename(candidate_name = candidate_name.x) %>%
+  filter(!is.na(total_amt)) %>%
+  arrange(desc(total_amt))
+
+
+```
+
+
+```{r}
+##write a function to make a boxplot
+comparison_boxplot <- function(indep_var, x_title) {
+  house_elections %>%
+  ggplot(aes(y = total_amt, x = indep_var)) + geom_boxplot(aes(fill = party)) + scale_fill_manual(values=c("blue", "red")) + scale_y_continuous(labels = comma) + labs(x = x_title, y = "Contributions to Candidate from Committees")
+}
+##make a plot with whether or not the candidate was the incumbent candidate on the x-axis and their total amount of contributions on the y-axis. Divide into seperate columns labeled by party
+incumbent_plot <- comparison_boxplot(indep_var = house_elections$incumbent, x_title = "Incumbent?")
+##make a plot with whether or not the candidate was the winning candidate on the x-axis and their total amount of contributions on the y-axis. Divide into seperate columns labeled by party
+winner_plot <- comparison_boxplot(indep_var = house_elections$ge_winner, x_title = "Won General Election?")
+
+
+##view the plots
+incumbent_plot
+```
+Figure 1: Incumbent candidates of both parties tend to raise more money than challengers.
+
+
+```{r}
+winner_plot
+```
+Figure 2: Winning candidates of both parties tend to have raised more money.
+```{r}
+
+####make a plot with whether or not the candidate was the winning candidate on the x-axis and their total amount of contributions on the y-axis. Divide into seperate columns labeled by incumbent/challenger
+comparison_boxplot2 <- function(indep_var, x_title) {
+  house_elections %>%
+  ggplot(aes(y = total_amt, x = indep_var)) + geom_boxplot(aes(fill = incumbent)) + scale_fill_manual(values=c("blue", "red")) + scale_y_continuous(labels = comma) + labs(x = x_title, y = "Contributions to Candidate from Committees")
+}
+incumbentwin_plot <- comparison_boxplot2(indep_var = house_elections$ge_winner, x_title = "Incumbents or Challengers Raising Money")
+incumbentwin_plot
+```
+Figure 3: Incumbents tend to raise more money than challengers, regardless of whether or not they win.
+```{r}
+##edit the individuals' data
+individuals <- individuals %>%
+  select(cmte_id, name, transaction_type, transaction_amt) %>%
+  group_by(cmte_id, transaction_type) %>%
+  summarize(no_of_contributions = n(), total_indiv_amt = sum(transaction_amt))
+
+```
+
+```{r}
+##join the individuals with the committees
+committees <- committees %>%
+  left_join(individuals, by = "cmte_id")
+
+```
+
+
+
+```{r}
+##isolate the data regarding the four major hill committees (thats what the cmte_ids refer to)
+hill_committees <- committees %>%
+  filter(cmte_id == "C00075820" | cmte_id == "C00000935" | cmte_id == "C00027466" | cmte_id == "C00042366") %>%
+  group_by(cmte_name) %>%
+  summarize(total_no_of_contributions = sum(no_of_contributions), total_indiv_contributions = sum(total_indiv_amt))
+
+```
+ 
+4 major Hill Committees' individual contributions for 2011-2012 cycle:
+
+```{r}
+##write a function to create a bar plot
+contribution_barplot <- function(contribution_arg, y_title, chart_title) {
+  # Creates two plots detailing:
+  # 1) the total amount raised from individual contributions,
+  # 2) the number of individual contributions received for each Hill committee.
+  #
+  # Args:
+  #  contribution_arg: The independent variable on the y-axis.
+  #  y_title:          Title for the y-axis.
+  #  chart_title:      The chart title.
+  hill_committees %>%
+  ggplot(aes(y = contribution_arg, x = cmte_name, fill = cmte_name)) + ggtitle(chart_title) + geom_bar(stat = "identity") + scale_fill_manual(name = "Committee Name", values=c("cornflowerblue", "blue", "pink", "red")) + scale_y_continuous(labels = comma) + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) + labs(y = y_title, x = element_blank())
+}
+##create the barplots from the function  
+indiv_total_plot <- contribution_barplot(contribution_arg = hill_committees$total_indiv_contributions, y_title = "Total Raised From Individual Contributions", chart_title = "Amount Raised from Individuals")
+indiv_number_plot <- contribution_barplot(contribution_arg = hill_committees$total_no_of_contributions, y_title = "Total Number of Individual Contributions", chart_title = "Number of Individual Contributions Received")
+
+
+indiv_total_plot
+```
+Figure 4: The Democratic Congressional Campaign Committee receives more money through individual campaign contributions than the Democratic Senatorial Campaign Committee, while the reverse is true for Republican committees.
+```{r}
+indiv_number_plot
+
+```
+Figure 5: Democratic committees receive a far greater number of campaign contributions than Republican committees (both for congressional and senatorial committees).
+
+Blog post providing useful context for interpreting the graphics:
+
+The purpose of these graphics was to visualize the relationship between candidate party, candidate incumbency, and the amount of contributions to a candidate’s campaign. Data used for this project was provided by the Federal Elections Commission. Campaign contributions which were labeled as “N/A” were excluded from the overall data set. We learn through Figures 1-3 that incumbent candidates and winning candidates have an advantage in raising money from party committees. Though incumbent candidates tend to raise more money than challenger candidates in both parties, Democratic challenger candidates raise less than Republican challengers and incumbent Democrats raise more than incumbent Republicans. Though winning candidates tend to raise more money than losing candidates in both parties, Democratic losing candidates raise less than Republican losing candidates and winning Democrats raise more than winning Republicans. Figures 4 and 5 tell us that Republican committees raise slightly less money than Democratic committees, but they receive far fewer campaign contributions, which suggests that individual Republican campaign contributions are far greater amounts than individual Democratic campaign contributions.
+
+
+
+
