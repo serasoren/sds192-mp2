@@ -1,0 +1,146 @@
+---
+title: "The Wrangling of FEC Data"
+output: oilabs::lab_report
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(oilabs)
+library(scales)
+load("C:/Users/admin/Desktop/Data Wrangling/candidates.rda")
+load("C:/Users/admin/Desktop/Data Wrangling/contributions.rda")
+load("C:/Users/admin/Desktop/Data Wrangling/house_elections.rda")
+load("C:/Users/admin/Desktop/Data Wrangling/individuals.rda")
+load("C:/Users/admin/Desktop/Data Wrangling/committees.rda")
+
+```
+
+* * *
+
+
+```{r}
+
+
+committees <- committees %>%
+  select(cmte_id, cmte_name, cmte_state, cmte_type, cmte_party_affiliation, cand_id) %>%
+  filter(cmte_party_affiliation == "REP" | cmte_party_affiliation == "DEM")
+
+house_elections <- house_elections %>%
+  select(fec_id, candidate_name, incumbent, party, ge_winner) %>%
+  filter(party == "D" | party == "R") %>%
+  rename(cand_id = fec_id) 
+
+ house_elections$party[house_elections$party == "R"] <- "REP"
+ house_elections$party[house_elections$party == "D"] <- "DEM"
+
+  
+```
+
+
+
+```{r}
+
+candidates <- candidates %>%
+  select(cand_id, cand_name, cand_party_affiliation, cand_election_yr, cand_office_state, cand_office, cand_office_district, cand_ici) %>%
+  filter(cand_party_affiliation == "DEM" | cand_party_affiliation == "REP")
+
+```
+
+
+
+```{r}
+
+contributions <- contributions %>%
+  filter(amndt_ind == "N", memo_cd != "X", transaction_type != "24A", transaction_type != "24N") %>%
+  select(cmte_id, entity_type, transaction_amt, cand_id)
+
+```
+
+
+
+```{r}
+
+house_contributions <- house_elections %>%
+  left_join(contributions, by = "cand_id") %>%
+  group_by(cand_id, candidate_name) %>%
+  summarize(total_amt = sum(transaction_amt))
+
+```
+
+```{r}
+
+house_elections <- house_elections %>%
+  left_join(house_contributions, by = "cand_id") %>%
+  select(-candidate_name.y) %>%
+  rename(candidate_name = candidate_name.x) %>%
+  filter(!is.na(total_amt)) %>%
+  arrange(desc(total_amt))
+
+```
+
+
+```{r}
+
+comparison_boxplot <- function(indep_var, x_title) {
+  house_elections %>%
+  ggplot(aes(y = total_amt, x = indep_var)) + geom_boxplot(aes(fill = party)) + scale_fill_manual(values=c("blue", "red")) + scale_y_continuous(labels = comma) + labs(x = x_title, y = "Contributions to Candidate from Committees")
+}
+
+incumbent_plot <- comparison_boxplot(indep_var = house_elections$incumbent, x_title = "Incumbent?")
+winner_plot <- comparison_boxplot(indep_var = house_elections$ge_winner, x_title = "Won General Election?")
+
+incumbent_plot
+winner_plot
+
+```
+
+```{r}
+
+individuals <- individuals %>%
+  select(cmte_id, name, transaction_type, transaction_amt) %>%
+  group_by(cmte_id, transaction_type) %>%
+  summarize(no_of_contributions = n(), total_indiv_amt = sum(transaction_amt))
+
+```
+
+```{r}
+
+committees <- committees %>%
+  left_join(individuals, by = "cmte_id")
+
+```
+
+Comparing National Republican Congressional Committee (NRCC) and Democratic Congressional Campaign Committee (DCCC):
+
+```{r}
+
+hill_committees <- committees %>%
+  filter(cmte_id == "C00075820" | cmte_id == "C00000935" | cmte_id == "C00027466" | cmte_id == "C00042366") %>%
+  group_by(cmte_name) %>%
+  summarize(total_no_of_contributions = sum(no_of_contributions), total_indiv_contributions = sum(total_indiv_amt))
+
+```
+ 
+4 major Hill Committees' individual contributions for 2011-2012 cycle:
+
+```{r}
+
+contribution_barplot <- function(contribution_arg, y_title, chart_title) {
+  hill_committees %>%
+  ggplot(aes(y = contribution_arg, x = cmte_name, fill = cmte_name)) + ggtitle(chart_title) + geom_bar(stat = "identity") + scale_fill_manual(name = "Committee Name", values=c("cornflowerblue", "blue", "pink", "red")) + scale_y_continuous(labels = comma) + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) + labs(y = y_title, x = element_blank())
+}
+  
+indiv_total_plot <- contribution_barplot(contribution_arg = hill_committees$total_indiv_contributions, y_title = "Total Raised From Individual Contributions", chart_title = "Amount Raised from Individuals")
+indiv_number_plot <- contribution_barplot(contribution_arg = hill_committees$total_no_of_contributions, y_title = "Total Number of Individual Contributions", chart_title = "Number of Individual Contributions Received")
+
+
+indiv_total_plot
+indiv_number_plot
+
+```
+
+
+
